@@ -51,13 +51,24 @@ function readTokenFromRequest(req, url) {
   return "";
 }
 
-function verifyJwtWithSecrets(token, secrets) {
-  for (const secret of secrets) {
+function verifyJwtWithAkSk(token, akSkList) {
+  const decoded = jwt.decode(token);
+  const hintedAk =
+    decoded && typeof decoded === "object" && typeof decoded.ak === "string"
+      ? decoded.ak.trim()
+      : "";
+
+  const preferred = hintedAk
+    ? akSkList.filter((entry) => entry.ak === hintedAk)
+    : [];
+  const candidates = preferred.length > 0 ? preferred : akSkList;
+
+  for (const credential of candidates) {
     try {
-      const payload = jwt.verify(token, secret, {
+      const payload = jwt.verify(token, credential.sk, {
         algorithms: ["HS256", "HS384", "HS512"],
       });
-      return { ok: true, payload };
+      return { ok: true, payload, ak: credential.ak };
     } catch (err) {
       continue;
     }
@@ -145,7 +156,16 @@ function renderHome(scripts) {
   <li>Trigger: <code>GET /api/&lt;script-name&gt;</code> (for example <code>/api/check</code>)</li>
   <li>Auto-loads scripts from local <code>package.json</code> (config entries take precedence on name conflicts)</li>
   <li>Auth: send JWT via <code>Authorization: Bearer &lt;token&gt;</code>, <code>x-runner-token</code>, or <code>?token=</code></li>
+  <li>AK/SK mode: generate JWT at <a href="https://jwt.io" target="_blank" rel="noopener noreferrer">jwt.io</a> using your script AK's SK</li>
 </ul>
+<h3>jwt.io payload guide</h3>
+<p>Use HS256 and sign with the SK for your AK. Suggested payload:</p>
+<pre>{
+  "sub": "gitai",
+  "ak": "&lt;your-ak&gt;",
+  "script": "&lt;script-name&gt;",
+  "exp": 1893456000
+}</pre>
 <label>script:</label>
 <select id="name">${options}</select>
 <label>jwt token:</label>
@@ -225,7 +245,7 @@ function createServer({ scripts, auditDir }) {
         return;
       }
 
-      const authResult = verifyJwtWithSecrets(token, scriptConfig.authTokens || []);
+      const authResult = verifyJwtWithAkSk(token, scriptConfig.akSk || []);
       if (!authResult.ok) {
         send(res, 403, "Forbidden: invalid token");
         return;
@@ -323,6 +343,40 @@ function createServer({ scripts, auditDir }) {
 function startServer({ scripts, auditDir, port }) {
   const server = createServer({ scripts, auditDir });
   server.listen(port, () => {
+    const lines = [];
+    lines.push("=== Script Runner Effective Config ===");
+    lines.push(`Port: ${port}`);
+    lines.push(`Audit dir: ${auditDir}`);
+    lines.push(`Scripts: ${Object.keys(scripts).length}`);
+    lines.push("");
+    lines.push("Configured scripts:");
+
+    for (const [scriptName, script] of Object.entries(scripts)) {
+      const runTarget = script.scriptPath
+        ? `bash ${script.scriptPath}`
+        : `${script.command || ""} ${Array.isArray(script.args) ? script.args.join(" ") : ""}`.trim();
+      lines.push(`- ${scriptName}`);
+      lines.push(`  rootDir : ${script.rootDir}`);
+      lines.push(`  run     : ${runTarget}`);
+
+      if (Array.isArray(script.akSk) && script.akSk.length > 0) {
+        lines.push("  secrets :");
+        for (const item of script.akSk) {
+          lines.push(`    - ${item.ak} => ${item.sk}`);
+        }
+      } else {
+        lines.push("  secrets : (none)");
+      }
+    }
+
+    lines.push("");
+    lines.push("JWT generation (recommended): https://jwt.io");
+    lines.push("Header : {\"alg\":\"HS256\",\"typ\":\"JWT\"}");
+    lines.push("Payload: {\"sub\":\"<user>\",\"ak\":\"<ak>\",\"script\":\"<script-name>\"}");
+    lines.push("Secret : use the SK mapped to that AK in your config");
+    lines.push("======================================");
+
+    process.stdout.write(`${lines.join("\n")}\n`);
     process.stdout.write(`Server listening on http://0.0.0.0:${port}\n`);
   });
   return server;

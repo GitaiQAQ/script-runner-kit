@@ -97,7 +97,7 @@ function loadJsConfig(configPath) {
   return loaded;
 }
 
-function normalizeAuthTokens(value, fieldPath) {
+function normalizeLegacyAuthTokens(value, fieldPath) {
   if (!Array.isArray(value)) {
     throw new Error(`${fieldPath} must be an array of strings`);
   }
@@ -105,7 +105,41 @@ function normalizeAuthTokens(value, fieldPath) {
   if (tokens.length === 0) {
     throw new Error(`${fieldPath} must contain at least one non-empty token`);
   }
-  return tokens;
+  return tokens.map((sk, index) => ({ ak: `legacy-${index + 1}`, sk }));
+}
+
+function normalizeAkSk(value, fieldPath) {
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldPath} must be an array of { ak, sk } objects`);
+  }
+
+  const entries = value.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`${fieldPath}[${index}] must be an object with ak and sk`);
+    }
+    const ak = String(item.ak || "").trim();
+    const sk = String(item.sk || "").trim();
+    if (!ak || !sk) {
+      throw new Error(`${fieldPath}[${index}] must provide non-empty ak and sk`);
+    }
+    return { ak, sk };
+  });
+
+  if (entries.length === 0) {
+    throw new Error(`${fieldPath} must contain at least one credential`);
+  }
+
+  return entries;
+}
+
+function readAkSkField(source, akSkFieldPath, legacyFieldPath) {
+  if (source.akSk !== undefined) {
+    return normalizeAkSk(source.akSk, akSkFieldPath);
+  }
+  if (source.authTokens !== undefined) {
+    return normalizeLegacyAuthTokens(source.authTokens, legacyFieldPath);
+  }
+  return undefined;
 }
 
 function normalizeScriptFromConfig(configDir, scriptName, scriptConfig) {
@@ -119,16 +153,17 @@ function normalizeScriptFromConfig(configDir, scriptName, scriptConfig) {
       ? scriptConfig.rootDir
       : "."
   );
-  const authTokens =
-    scriptConfig.authTokens === undefined
-      ? undefined
-      : normalizeAuthTokens(scriptConfig.authTokens, `scripts.${scriptName}.authTokens`);
+  const akSk = readAkSkField(
+    scriptConfig,
+    `scripts.${scriptName}.akSk`,
+    `scripts.${scriptName}.authTokens`
+  );
 
   if (typeof scriptConfig.scriptPath === "string" && scriptConfig.scriptPath.trim()) {
     return {
       rootDir: resolvedRootDir,
       scriptPath: path.resolve(configDir, scriptConfig.scriptPath),
-      authTokens,
+      akSk,
     };
   }
 
@@ -146,7 +181,7 @@ function normalizeScriptFromConfig(configDir, scriptName, scriptConfig) {
       rootDir: resolvedRootDir,
       command: scriptConfig.command,
       args,
-      authTokens,
+      akSk,
     };
   }
 
@@ -200,10 +235,7 @@ function resolveScriptConfig(configPath, rawConfig, cwd) {
   }
 
   const configDir = path.dirname(configPath);
-  const globalAuthTokens =
-    rawConfig.authTokens === undefined
-      ? undefined
-      : normalizeAuthTokens(rawConfig.authTokens, "authTokens");
+  const globalAkSk = readAkSkField(rawConfig, "akSk", "authTokens");
   const scripts = rawConfig.scripts || {};
   if (typeof scripts !== "object" || Array.isArray(scripts)) {
     throw new Error("Config field 'scripts' must be an object when provided");
@@ -232,15 +264,15 @@ function resolveScriptConfig(configPath, rawConfig, cwd) {
   }
 
   for (const [scriptName, scriptConfig] of Object.entries(resolvedScripts)) {
-    if (!Array.isArray(scriptConfig.authTokens) || scriptConfig.authTokens.length === 0) {
-      if (globalAuthTokens && globalAuthTokens.length > 0) {
+    if (!Array.isArray(scriptConfig.akSk) || scriptConfig.akSk.length === 0) {
+      if (globalAkSk && globalAkSk.length > 0) {
         resolvedScripts[scriptName] = {
           ...scriptConfig,
-          authTokens: globalAuthTokens,
+          akSk: globalAkSk,
         };
       } else {
         throw new Error(
-          `Auth required for scripts.${scriptName}. Add scripts.${scriptName}.authTokens or top-level authTokens`
+          `Auth required for scripts.${scriptName}. Add scripts.${scriptName}.akSk (or legacy authTokens) or top-level akSk`
         );
       }
     }

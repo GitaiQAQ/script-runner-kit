@@ -58,12 +58,18 @@ Example `script-runner.config.json`:
 {
   "port": 8088,
   "auditDir": ".script-audit-logs",
-  "authTokens": ["global-secret-a", "global-secret-b"],
+  "akSk": [
+    { "ak": "global-bot-v2", "sk": "global-secret-a" },
+    { "ak": "global-bot-v1", "sk": "global-secret-b" }
+  ],
   "scripts": {
     "check-update": {
       "scriptPath": "./scripts/check-update.sh",
       "rootDir": ".",
-      "authTokens": ["check-secret-a", "check-secret-b"]
+      "akSk": [
+        { "ak": "check-bot-v2", "sk": "check-secret-a" },
+        { "ak": "check-bot-v1", "sk": "check-secret-b" }
+      ]
     }
   }
 }
@@ -75,7 +81,7 @@ Notes:
 - Each script supports either:
   - `scriptPath` (execute via `bash <scriptPath>`)
   - or `command` + optional `args`.
-- Auth uses JWT and supports multiple secrets per script via `authTokens`.
+- Auth uses JWT and supports AK/SK pairs per script via `akSk`.
 
 ### Auto package.json scripts
 
@@ -94,11 +100,18 @@ Every API call requires a JWT token. Supported token sources:
 - `x-runner-token: <token>`
 - query parameter `?token=<token>` (convenient for EventSource demos)
 
+Generate your JWT at `https://jwt.io` using:
+
+- Header: `{"alg":"HS256","typ":"JWT"}`
+- Payload example: `{"sub":"gitai","ak":"check-bot-v2","script":"check-update"}`
+- Secret: use the SK mapped to that AK in your config
+
 Verification rules:
 
 - Uses `jsonwebtoken.verify()` with algorithms `HS256/HS384/HS512`
-- Supports multiple secrets per script (`authTokens` array), useful for key rotation
-- If a script has no local `authTokens`, top-level `authTokens` is used as fallback
+- Supports multiple credentials per script (`akSk` array), useful for key rotation
+- If a script has no local `akSk`, top-level `akSk` is used as fallback
+- Legacy `authTokens` is still accepted for backward compatibility
 
 ## HTTP API
 

@@ -10,16 +10,22 @@ Supported sources (priority order):
 2. `x-runner-token: <token>`
 3. Query param `?token=<token>`
 
-## Config example
+## Config example (AK/SK)
 
 ```json
 {
-  "authTokens": ["global-secret-a", "global-secret-b"],
+  "akSk": [
+    { "ak": "global-bot-v2", "sk": "global-secret-a" },
+    { "ak": "global-bot-v1", "sk": "global-secret-b" }
+  ],
   "scripts": {
     "deploy": {
       "command": "npm",
       "args": ["run", "deploy"],
-      "authTokens": ["deploy-secret-v2", "deploy-secret-v1"]
+      "akSk": [
+        { "ak": "deploy-bot-v2", "sk": "deploy-secret-v2" },
+        { "ak": "deploy-bot-v1", "sk": "deploy-secret-v1" }
+      ]
     },
     "build": {
       "command": "npm",
@@ -29,15 +35,58 @@ Supported sources (priority order):
 }
 ```
 
-- Script-level `authTokens` are preferred.
-- If missing, top-level `authTokens` is used.
+- Script-level `akSk` are preferred.
+- If missing, top-level `akSk` is used.
+
+> Backward compatibility: legacy `authTokens` (string array) is still supported.
 
 ## Key rotation
 
-Use multiple secrets and keep new secret first:
+Use multiple AK/SK pairs and keep new credential first:
 
 ```json
-"authTokens": ["new-secret", "old-secret"]
+"akSk": [
+  { "ak": "deploy-bot-v3", "sk": "new-secret" },
+  { "ak": "deploy-bot-v2", "sk": "old-secret" }
+]
 ```
 
-The runner tries each secret until verification succeeds.
+The runner tries matching AK first (from JWT claim `ak`), then falls back to all SKs.
+
+## Generate token (jwt.io)
+
+Use `https://jwt.io` and sign with HS256.
+
+- Header:
+
+```json
+{ "alg": "HS256", "typ": "JWT" }
+```
+
+- Payload example:
+
+```json
+{ "sub": "gitai", "ak": "deploy-bot-v2", "script": "deploy" }
+```
+
+### Payload fields (recommended)
+
+- `sub` (string): caller identity, for audit display (for example `gitai`)
+- `ak` (string): AK name from your `akSk` config (for example `deploy-bot-v2`)
+- `script` (string): target script name (for example `deploy`)
+- `exp` (number, optional): UNIX timestamp expiration (or set via jwt.io expiration UI)
+
+Example payload with expiration:
+
+```json
+{
+  "sub": "gitai",
+  "ak": "deploy-bot-v2",
+  "script": "deploy",
+  "exp": 1893456000
+}
+```
+
+- Secret: use the SK corresponding to `deploy-bot-v2` in your `akSk` config.
+
+Then send the generated JWT via `Authorization: Bearer <token>` (or `x-runner-token` / `?token=`).
