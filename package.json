@@ -1,0 +1,50 @@
+{
+  "name": "script-runner-kit",
+  "version": "0.1.0",
+  "description": "Run project scripts via webhook-friendly HTTP endpoints",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "script-runner-kit": "bin/script-runner-kit.js"
+  },
+  "access": "public",
+  "main": "src/server.js",
+  "files": [
+    "bin",
+    "src",
+    "scripts",
+    "script-runner.config.json",
+    "README.md",
+    "docs",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "webhook",
+    "bot",
+    "script-runner",
+    "cli",
+    "npx"
+  ],
+  "scripts": {
+    "check": "pnpm run check:syntax && pnpm run check:cli",
+    "check:syntax": "node --check src/index.js && node --check bin/script-runner-kit.js && node --check src/config.js && node --check src/server.js && node --check src/cli.js",
+    "check:cli": "node bin/script-runner-kit.js --help"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GitaiQAQ/script-runner-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/GitaiQAQ/script-runner-kit/issues"
+  },
+  "homepage": "https://github.com/GitaiQAQ/script-runner-kit#readme",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2"
+  }
+}

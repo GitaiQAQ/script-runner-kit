@@ -1,0 +1,14 @@
+{
+  "port": 8088,
+  "auditDir": ".script-audit-logs",
+  "authTokens": [
+    "replace-with-strong-jwt-secret-1",
+    "replace-with-strong-jwt-secret-2"
+  ],
+  "scripts": {
+    "check-update": {
+      "scriptPath": "./scripts/check-update.sh",
+      "rootDir": "."
+    }
+  }
+}
